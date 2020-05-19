@@ -1,0 +1,169 @@
+<script type="text/html" data-template-name="aiotumblr-credentials">
+    <div id="node-config-aiotumblr-keys">
+        <p>[TODO info on creating application]</p>
+        <div class="form-row">
+            <label for="node-config-input-consumer_key">Consumer key: </label>
+            <input type="text" id="node-config-input-consumer_key">
+        </div>
+        <div class="form-row">
+            <label for="node-config-input-consumer_secret">Consumer secret: </label>
+            <input type="password" id="node-config-input-consumer_secret">
+        </div>
+        <div class="form-row">
+            <a class="btn" id="node-config-start-auth" href="#" target="_blank">Authenticate</a>
+        </div>
+    </div>
+    <div id="node-config-aiotumblr-user">
+        <div class="form-row">
+            <label for="node-config-input-username"><i class="fa fa-user"></i>Username: </label>
+            <span id="node-config-aiotumblr-username" class="input-xlarge uneditable-input"></span>
+        </div>
+        <input id="node-config-input-username" type="hidden">
+    </div>
+</script>
+
+<script type="application/javascript">
+    (function() {
+        RED.nodes.registerType('aiotumblr-credentials', {
+            category: 'config',
+            defaults: {
+                username: { value: "" },
+                definitions: { value: {} },
+            },
+            credentials: {
+                username: { type: 'text' },
+                consumer_key: { type: 'text' },
+                consumer_secret: { type: 'password' },
+                access_token: { type: 'password' },
+                access_token_secret: { type: 'password' },
+            },
+            label: function() {
+                return this.username;
+            },
+            oneditprepare: function() {
+                var id = this.id;
+                var node = this;
+
+                if (this.definitions === {}) {
+                    // New config node, populate with the initial set of definitions.
+                    $.getJSON('aiotumblr-credentials/default-defs.json', function(data) {
+                        node.definitions = data.definitions;
+                        node.groups = data.groups;
+                    });
+                }
+
+                function updateTumblrAuthButton() {
+                    var v1 = $("#node-config-input-consumer_key").val();
+                    var v2 = $("#node-config-input-consumer_secret").val();
+
+                    $("#node-config-start-auth").toggleClass("disabled",(v1.length === 0 || v2.length === 0));
+
+                }
+                $("#node-config-input-consumer_key").on('change keydown paste input',updateTumblrAuthButton);
+                $("#node-config-input-consumer_secret").on('change keydown paste input',updateTumblrAuthButton);
+
+                function updateTumblrUsername(username) {
+                    $("#node-config-aiotumblr-keys").hide();
+                    $("#node-config-aiotumblr-user").show();
+                    $("#node-config-input-username").val(username); // hidden input with actual value
+                    $("#node-config-aiotumblr-username").html(username); // shown "input" to the user
+                }
+
+                function pollTumblrCredentials(e) {
+                    // see `editorApp.get('/credentials/:type/:id', needsPermission("credentials.read"),credentials.get,apiUtil.errorHandler);`
+                    // this.credentials.XXX doesn't get updated when the runtime calls `RED.nodes.addCredentials` pre-deploy.
+                    $.getJSON('credentials/aiotumblr-credentials/'+id,function(data) {
+                        if (data.username) {
+                            $("#node-config-dialog-ok").button("enable");
+                            updateTumblrUsername(data.username);
+                            delete window.aiotumblrConfigNodeIntervalId;
+                        } else {
+                            window.aiotumblrConfigNodeIntervalId = window.setTimeout(pollTumblrCredentials,2000);
+                        }
+                    });
+                }
+
+                updateTumblrAuthButton();
+
+                if (this.username) {
+                    updateTumblrUsername(this.username);
+                }
+                else {
+                    $("#node-config-aiotumblr-keys").show();
+                    $("#node-config-aiotumblr-user").hide();
+                    $("#node-config-dialog-ok").button("disable"); // disable the Update button (top right) on the config screen
+                }
+
+                $("#node-config-start-auth").mousedown(function(e) {
+                    var key = $("#node-config-input-consumer_key").val();
+                    var secret = $("#node-config-input-consumer_secret").val();
+                    var pathname = document.location.pathname;
+                    if (pathname.slice(-1) !== "/") {
+                        pathname += "/";
+                    }
+                    var callback = encodeURIComponent(location.protocol+"//"+location.hostname+
+                        (location.port?":"+location.port:"")+
+                        pathname+"aiotumblr-credentials/"+id+"/auth/callback");
+                    var url = 'aiotumblr-credentials/'+id+'/auth?callback='+callback+'&consumer_key='+key+"&consumer_secret="+secret;
+                    $(this).attr("href",url);
+                    window.aiotumblrConfigNodeIntervalId = window.setTimeout(pollTumblrCredentials,2000);
+                });
+                $("#node-config-start-auth").click(function(e) {
+                    var key = $("#node-config-input-consumer_key").val();
+                    var secret = $("#node-config-input-consumer_secret").val();
+                    if (key === "" || secret === "") {
+                        e.preventDefault();
+                    }
+                });
+            },
+            oneditsave: function() {
+                if (window.aiotumblrConfigNodeIntervalId) {
+                    window.clearTimeout(window.aiotumblrConfigNodeIntervalId);
+                    delete window.aiotumblrConfigNodeIntervalId;
+                }
+            },
+            oneditcancel: function() {
+                if (window.aiotumblrConfigNodeIntervalId) {
+                    window.clearTimeout(window.aiotumblrConfigNodeIntervalId);
+                    delete window.aiotumblrConfigNodeIntervalId;
+                }
+            },
+            oneditdelete: function() {
+                if (window.aiotumblrConfigNodeIntervalId) {
+                    window.clearTimeout(window.aiotumblrConfigNodeIntervalId);
+                    delete window.aiotumblrConfigNodeIntervalId;
+                }
+            },
+        });
+    })();
+</script>
+
+<script type="text/html" data-template-name="aiotumblr-out">
+    <div class="form-row">
+        <label for="node-input-tumblrConnection"><i class="fa fa-user"></i>Tumblr</label>
+        <input type="text" id="node-input-tumblrConnection">
+    </div>
+    <div class="form-row">
+        <label for="node-input-name">Name</label>
+        <input type="text" id="node-input-name">
+    </div>
+</script>
+
+<script type="application/javascript">
+    RED.nodes.registerType('aiotumblr-out', {
+        category: 'social',
+        // color: '#36465D', // old blue :)
+        // color: '#001935', // segway navy (new (tumblr v12.6) dashboard background)
+        color: '#7d93b3', // lighter tint of old blue
+        icon: 'font-awesome/fa-tumblr',
+        defaults: {
+            tumblrConnection: { type: 'aiotumblr-credentials', required: true },
+            name: { value: "" },
+        },
+        inputs: 1,
+        outputs: 1,
+        label: function() {
+            return this.name || 'aiotumblr-out';
+        }
+    });
+</script>
